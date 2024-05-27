@@ -1,0 +1,55 @@
+to create GL mapping file:
+
+1- master GL:
+let
+    Source = Excel.Workbook(File.Contents(#"mapping file source"), null, true),
+    #"Report Layout_Sheet" = Source{[Item="Report Layout",Kind="Sheet"]}[Data],
+    #"Promoted Headers" = Table.PromoteHeaders(#"Report Layout_Sheet", [PromoteAllScalars=true]),
+    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Column1", type any}, {"ReportID", type any}, {"Report", type any}, {"id", type text}, {"displayName", type text}, {"formula", type text}, {"style", type text}, {"formatString", type text}, {"signFactor", Int64.Type}}),
+    #"Removed Columns" = Table.RemoveColumns(#"Changed Type",{"Column1", "ReportID", "Report"}),
+    #"Filtered Rows" = Table.SelectRows(#"Removed Columns", each ([id] <> null)),
+    #"Removed Other Columns" = Table.SelectColumns(#"Filtered Rows",{"id", "Formula2", "signFactor"}),
+    #"Filtered Rows1" = Table.SelectRows(#"Removed Other Columns", each ([Formula2] <> null)),
+    #"Split Column by Delimiter" = Table.SplitColumn(#"Filtered Rows1", "Formula2", Splitter.SplitTextByDelimiter("+", QuoteStyle.None), {"Formula2.1", "Formula2.2", "Formula2.3", "Formula2.4", "Formula2.5", "Formula2.6", "Formula2.7", "Formula2.8", "Formula2.9", "Formula2.10", "Formula2.11", "Formula2.12", "Formula2.13", "Formula2.14", "Formula2.15", "Formula2.16", "Formula2.17", "Formula2.18", "Formula2.19", "Formula2.20", "Formula2.21", "Formula2.22", "Formula2.23", "Formula2.24", "Formula2.25", "Formula2.26", "Formula2.27", "Formula2.28", "Formula2.29", "Formula2.30", "Formula2.31", "Formula2.32", "Formula2.33", "Formula2.34", "Formula2.35", "Formula2.36", "Formula2.37", "Formula2.38", "Formula2.39"}),
+    #"Unpivoted Other Columns1" = Table.UnpivotOtherColumns(#"Split Column by Delimiter", {"id", "signFactor"}, "Attribute", "Value"),
+    #"Merged Queries1" = Table.NestedJoin(#"Unpivoted Other Columns1", {"Value"}, #"dimGL mapping (2)", {"Group Code"}, "dimGL mapping (2)", JoinKind.LeftOuter),
+    #"Expanded dimGL mapping (2)" = Table.ExpandTableColumn(#"Merged Queries1", "dimGL mapping (2)", {"GL Code"}, {"GL Code"}),
+    #"Filtered Rows2" = Table.SelectRows(#"Expanded dimGL mapping (2)", each true),
+    #"Removed Columns2" = Table.RemoveColumns(#"Filtered Rows2",{"Attribute", "Value"}),
+    #"Renamed Columns1" = Table.RenameColumns(#"Removed Columns2",{{"id", "Group Code"}}),
+    #"Added Custom" = Table.AddColumn(#"Renamed Columns1", "key", each [Group Code]&"_"&[GL Code]),
+    #"Appended Query" = Table.Combine({#"Added Custom", #"dimGL mapping (2)"}),
+    #"Filtered Rows3" = Table.SelectRows(#"Appended Query", each true)
+in
+    #"Filtered Rows3"
+
+
+2: PL/BS GL:
+
+let
+    Source = dim_GL_Mapping_break,
+    #"Filtered Rows" = Table.SelectRows(Source, each not Text.Contains([Group Code], "CF")),
+    #"Filtered Rows1" = Table.SelectRows(#"Filtered Rows", each true),
+    #"Merged Queries" = Table.NestedJoin(#"Filtered Rows1", {"GL Code"}, #"dimGL mapping", {"GL Code"}, "dimGL mapping", JoinKind.LeftOuter),
+    #"Expanded dimGL mapping" = Table.ExpandTableColumn(#"Merged Queries", "dimGL mapping", {"GL Description", "Group Code", "Group Description", "Sub Group Code", "Sub Group Description", "PL/BS", "Is EBITDA", "Is NOPAT"}, {"GL Description", "Group Code.1", "Group Description", "Sub Group Code", "Sub Group Description", "PL/BS", "Is EBITDA", "Is NOPAT"}),
+    #"Filtered Rows2" = Table.SelectRows(#"Expanded dimGL mapping", each [Group Code] <> null)
+in
+    #"Filtered Rows2"
+
+
+3: Cash flow GL:
+
+let
+    Source = dim_GL_Mapping_break,
+    #"Filtered Rows" = Table.SelectRows(Source, each Text.Contains([Group Code], "CF")),
+    #"Filtered Rows1" = Table.SelectRows(#"Filtered Rows", each true),
+    #"Merged Queries" = Table.NestedJoin(#"Filtered Rows1", {"key"}, #"dimGL mapping", {"Key"}, "dimGL mapping", JoinKind.LeftOuter),
+    #"Expanded dimGL mapping" = Table.ExpandTableColumn(#"Merged Queries", "dimGL mapping", {"GL Description", "Group Code", "Group Description", "Sub Group Code", "Sub Group Description", "PL/BS"}, {"GL Description", "Group Code.1", "Group Description", "Sub Group Code", "Sub Group Description", "PL/BS"}),
+    #"Filtered Rows2" = Table.SelectRows(#"Expanded dimGL mapping", each [Group Code] <> null)
+in
+    #"Filtered Rows2"
+-------
+
+
+
+
