@@ -1,5 +1,11 @@
 To get the missing GL in DIM table
 
+Create a columns in FACT table which is linked to dim table through relationship.
+
+missing_Gl = 
+IF( ISBLANK(RELATED(bridge_GL_Mapping[GL Code])), 1, 0)
+----
+
 MEASURE:
 missing_GL1 = 
 SUMMARIZE(  
@@ -7,7 +13,7 @@ SUMMARIZE(
     'PL actual'[04 GL Code]
 )
 
-
+----
 FILTER:
 check filter = 
 
