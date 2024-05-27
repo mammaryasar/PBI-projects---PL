@@ -1,0 +1,411 @@
+To get the missing GL in DIM table
+
+MEASURE:
+missing_GL1 = 
+SUMMARIZE(  
+    FILTER('PL actual', 'PL actual'[missing_Gl] = 1),
+    'PL actual'[04 GL Code]
+)
+
+
+FILTER:
+check filter = 
+
+VAR _GLFilter =
+ALLSELECTED(dim_GL_Mapping[GL Code])
+
+VAR missingShow = 
+IF(
+    SELECTEDVALUE(GL_combine[GL Code]
+    ) IN _GLFilter,
+    1,
+    0
+)
+RETURN
+missingShow
+
+----------
+
+LAST YEAR MEASURE: 
+Dec Last year = calculate([CY_BS],ENDOFYEAR(DATEADD(dimDate[Date],-1,YEAR),"12/31/2022"))
+
+-------
+
+LAST MONTH MEASURE:
+LM = CALCULATE(VALUES(dimDate[Year Month Number]),SAMEPERIODLASTYEAR('dimDate'[Date]))
+-----------------
+
+Budget measure:
+BUD = 
+SWITCH(
+SELECTEDVALUE(dimReportLayout[displayName]),
+"EBITDA-Cash",[EBITDA_Bud],
+"NOPAT",[NOPAT_Bud],
+
+SWITCH([Selected Period],
+1,sum('PL budget'[PL Budget]),
+2,CALCULATE(sum('PL budget'[PL Budget]),DATESYTD(dimDate[Date]) 
+)
+)
+)
+
+-----
+
+CY merasure:
+
+CY = 
+SWITCH(
+SELECTEDVALUE(dimReportLayout[displayName]),
+"EBITDA-Cash",[EBITDA_Act],
+"NOPAT",[NOPAT_Act],
+
+SWITCH([Selected Period],
+1,sum('PL actual'[PL Actual CY]),
+2,CALCULATE(sum('PL actual'[PL Actual CY]),DATESYTD(dimDate[Date]) 
+)
+)
+)
+
+
+-----
+
+CY % of sales = 
+var salesvale = calculate([CY], ALL(dim_GL_Mapping),ALL(dimReportLayout),'dimReportLayout'[displayName] = "Net Sales")
+return DIVIDE([CY], salesvale)
+
+---
+
+EBITDA_Act = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        
+        "new sum ", 
+        SWITCH([Selected Period],
+    1, CALCULATE(sum('PL actual'[PL Actual CY]),dim_GL_Mapping[Is EBITDA]="YES",dim_GL_Mapping[PL/BS]="PL"),
+    2,CALCULATE(sum('PL actual'[PL Actual CY]),dim_GL_Mapping[Is EBITDA]="YES",dim_GL_Mapping[PL/BS]="PL",DATESYTD(dimDate[Date]))
+    )),
+    [new sum ]
+)
+
+---
+
+EBITDA_Bud = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        
+        "new sum ", 
+        SWITCH([Selected Period],
+    1, CALCULATE(sum('PL budget'[PL Budget]),dim_GL_Mapping[Is EBITDA]="YES",dim_GL_Mapping[PL/BS]="PL"),
+    2,CALCULATE(sum('PL budget'[PL Budget]),dim_GL_Mapping[Is EBITDA]="YES",dim_GL_Mapping[PL/BS]="PL",DATESYTD(dimDate[Date]))
+    )),
+    [new sum ]
+)
+
+
+
+NOPAT_Act = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        
+        "new sum ", 
+        SWITCH([Selected Period],
+    1, CALCULATE(sum('PL actual'[PL Actual CY]),dim_GL_Mapping[Is NOPAT]="YES",dim_GL_Mapping[PL/BS]="PL"),
+    2,CALCULATE(sum('PL actual'[PL Actual CY]),dim_GL_Mapping[Is NOPAT]="YES",dim_GL_Mapping[PL/BS]="PL",DATESYTD(dimDate[Date]))
+    )),
+    [new sum ]
+)
+
+
+----
+
+NOPAT_Bud = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        
+        "new sum ", 
+        SWITCH([Selected Period],
+    1, CALCULATE(sum('PL budget'[PL Budget]),dim_GL_Mapping[Is NOPAT]="YES",dim_GL_Mapping[PL/BS]="PL"),
+    2,CALCULATE(sum('PL budget'[PL Budget]),dim_GL_Mapping[Is NOPAT]="YES",dim_GL_Mapping[PL/BS]="PL",DATESYTD(dimDate[Date]))
+    )),
+    [new sum ]
+)
+
+
+
+---
+
+TO HIDE BLANK GL CODES IN PL:
+
+PL filter = IF(NOT (ISBLANK([CY]) && ISBLANK([BUD]) && ISBLANK([PY])), 1, 0)  // then put in the filter and select "is = 1"
+
+---
+
+demo selector = {
+    ("BUD", NAMEOF('PL measures'[BUD]), 0),
+    ("CY", NAMEOF('PL measures'[CY]), 1),
+    ("Growth", NAMEOF('PL measures'[Growth]), 2),
+    ("PY", NAMEOF('PL measures'[PY]), 3),
+    ("Variance", NAMEOF('PL measures'[Variance]), 4)
+}
+
+----
+
+
+Format = {
+    (1,"0.0"),
+    (2,"0.0K"),
+    (3,"0.0M")
+}
+
+
+----
+
+
+GL_combine = 
+ SUMMARIZE(
+ 
+ UNION(
+ SELECTCOLUMNS('PL actual',
+ "GL Code", 'PL actual'[04 GL Code],
+ "Description", 'PL actual'[04 GL Name],
+ "Table", "PL Actual"),
+
+ 
+ SELECTCOLUMNS('PL budget',
+ "GL Code", 'PL budget'[04 GL Code],
+ "Description", 'PL budget'[04 GL Name],
+  "Table", "PL Budget"),
+
+ SELECTCOLUMNS('BS Actual',
+ "GL Code", 'BS Actual'[02 Second Line Code],
+ "Description", 'BS Actual'[02 Second Line Name],
+  "Table", "BS Actual"),
+
+SELECTCOLUMNS('BS Budget',
+ "GL Code", 'BS Budget'[02 Second Line Code],
+ "Description", 'BS Budget'[02 Second Line Name],
+  "Table", "BS Budget")
+    
+ ),
+[GL Code],
+[Description],
+[Table]
+)
+
+---
+
+Numeric number dynamic format:
+
+SWITCH(
+    SELECTEDVALUE('Format'[Format], "0"),
+    "0.0", "#,0.",
+    "0.0K", "#,0,.K",
+    "0.0M", "#,0,,.0M")
+
+----
+
+////////////////////////----------------CASH FLOW MEASURES-----------------///////////////////
+
+CF filter = IF(NOT (ISBLANK([CF_PL_CY]) && ISBLANK([CF_BS change_vs_Dec]) && ISBLANK([CF_vs Dec LY])), 1, 0)
+
+----------------
+
+CF Operator = min(dim_GL_Mapping[signFactor])
+
+----
+
+CF_PL_CY = SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Description],
+        "new sum ", [CY]*[CF Operator]
+    ),
+    [new sum ]
+)
+
+
+----------
+
+BS_CY-CF = var cmonth = CALCULATE(VALUES(dimDate[Year Month Number]))
+var snapcurmonth = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum1 ", 
+        calculate([CY_BS],all(dimDate),dimDate[Year Month Number] = cmonth)*[CF Operator]
+    ),
+    [new sum1 ]
+)
+RETURN
+snapcurmonth
+
+-----------
+
+BS_Dec_LY = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum ", 
+        
+        IF((SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA2-ADD" || SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA4-DEL" ),0,
+        
+       [Dec Last year])
+    ),
+    [new sum ]
+)
+
+
+
+--------
+
+
+BS_LY = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum ", 
+        
+        IF((SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA2-ADD" || SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA4-DEL" ),0,
+        
+        [PY_BS])
+    ),
+    [new sum ]
+)
+
+----------------
+
+CF_BS change_vs_Dec = 
+var cmonth = CALCULATE(VALUES(dimDate[Year Month Number]))
+var pmonth = CALCULATE(VALUES(dimDate[Year Month Number]),ENDOFYEAR(DATEADD(dimDate[Date],-1,YEAR),"12/31/2022"))
+var snapcurmonth = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum1 ", 
+        calculate([CY_BS],all(dimDate),dimDate[Year Month Number] = cmonth)*[CF Operator]
+    ),
+    [new sum1 ]
+)
+
+var snappriormonth = 
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum ", 
+        IF((SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA2-ADD" || SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA4-DEL" ),0,
+        [Dec Last year])
+    ),
+    [new sum ]
+)
+   
+RETURN
+IF((SELECTEDVALUE(dimReportLayout[id])="CF340"), snapcurmonth,
+
+IF(SELECTEDVALUE(dimReportLayout[id])="CF330",snappriormonth,
+ (snappriormonth-snapcurmonth)
+        
+))
+
+
+----------------
+
+CF_BS change_vs_LY Month = 
+var cmonth = CALCULATE(VALUES(dimDate[Year Month Number]))
+var pmonth = CALCULATE(VALUES(dimDate[Year Month Number]),SAMEPERIODLASTYEAR('dimDate'[Date]))
+var snapcurmonth = 
+
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum1 ", 
+        calculate([CY_BS],all(dimDate),dimDate[Year Month Number] = cmonth)*[CF Operator]
+    ),
+    [new sum1 ]
+)
+
+var snappriormonth = 
+SUMX(
+    SUMMARIZE(
+        dim_GL_Mapping,
+        dim_GL_Mapping[GL Code]    ,
+        "new sum ", 
+        IF((SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA2-ADD" || SELECTEDVALUE(dim_GL_Mapping[GL Code])="KFA4-DEL" ),0,
+        [PY_BS])
+    ),
+    [new sum ]
+)
+   
+RETURN
+IF((SELECTEDVALUE(dimReportLayout[id])="CF340"), snapcurmonth,
+
+IF(SELECTEDVALUE(dimReportLayout[id])="CF330",snappriormonth,
+ (snappriormonth-snapcurmonth)
+        
+))
+
+
+---------
+
+
+
+CF_vs Dec LY = SUMX(
+    SUMMARIZE(
+        dimReportLayout,
+        dimReportLayout[displayName],
+        "CF_vs Dec LY", [CF_PL_CY]+[CF_BS change_vs_Dec]
+    ),
+    [CF_vs Dec LY]
+)
+
+
+----
+
+CF_vs LY = SUMX(
+    SUMMARIZE(
+        dimReportLayout,
+        dimReportLayout[displayName],
+        "CF_vs LY", [CF_PL_CY]+[CF_BS change_vs_LY Month]
+    ),
+    [CF_vs LY]
+)
+
+
+----------------
+
+
+
+
+
+
+
+////////////////////////----------------CASH FLOW MEASURES-----------------///////////////////
+
+
+-----
+
+////////////////////////----------------RELATIONSHIPS-----------------///////////////////
+
+
+dimReportLAyout  <many_to_one/Both> dimReportLAyout_bridge <many_to_one/Both> dim_GL_Mapping  <many_to_one/Both>  bridge_GL_Maping  <many_to_one/single> FACT tables
+----
+dim_Date  <many_to_one/single> FACT tables
+----
+dim_Countries  <many_to_one/single> FACT tables
